@@ -1,0 +1,7 @@
+{
+  "name": "AXIOM AI",
+  "description": "A comprehensive AI-powered education platform featuring intelligent timetabling, attendance tracking, career counseling, and student analytics.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
