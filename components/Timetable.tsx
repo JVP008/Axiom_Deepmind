@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { DAYS, TIMES, INITIAL_TIMETABLE } from '../constants';
 import { Plus, Download, Edit3, Sparkles, Loader2, X, Save } from 'lucide-react';
-import { ClassSession } from '../types';
+import { ClassSession, UserRole } from '../types';
 import { generateTimetable } from '../services/ai';
 
 const COLORS = [
@@ -16,7 +16,11 @@ const COLORS = [
     'bg-red-400'
 ];
 
-export const Timetable: React.FC = () => {
+interface TimetableProps {
+    role: UserRole;
+}
+
+export const Timetable: React.FC<TimetableProps> = ({ role }) => {
   const [schedule, setSchedule] = useState<ClassSession[]>(INITIAL_TIMETABLE);
   const [isGenerating, setIsGenerating] = useState(false);
   
@@ -45,6 +49,9 @@ export const Timetable: React.FC = () => {
   };
 
   const openAddModal = (day: string, time: string) => {
+      // Only teacher can edit
+      if (role !== 'teacher') return;
+
       setEditingSession({
           id: '',
           day,
@@ -59,6 +66,9 @@ export const Timetable: React.FC = () => {
   };
 
   const openEditModal = (session: ClassSession) => {
+      // Only teacher can edit
+      if (role !== 'teacher') return;
+      
       setEditingSession({ ...session });
       setIsModalOpen(true);
   };
@@ -99,7 +109,7 @@ export const Timetable: React.FC = () => {
       )}
 
       {/* Edit/Add Modal */}
-      {isModalOpen && (
+      {isModalOpen && role === 'teacher' && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
               <div className="bg-white dark:bg-slate-900 w-full max-w-md border-2 border-slate-900 dark:border-slate-100 shadow-hard p-6 animate-in zoom-in duration-200">
                   <div className="flex justify-between items-center mb-6 border-b-2 border-slate-900 dark:border-slate-100 pb-2">
@@ -180,18 +190,20 @@ export const Timetable: React.FC = () => {
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-           <h2 className="text-2xl font-black uppercase text-shadow-sm">Class Schedule</h2>
+           <h2 className="text-2xl font-black uppercase text-shadow-sm">{role === 'teacher' ? 'Teaching Schedule' : 'My Classes'}</h2>
            <p className="font-mono text-sm text-slate-500 border-b-2 border-slate-900 dark:border-slate-100 inline-block">Academic Year 2024-2025</p>
         </div>
         <div className="flex gap-3">
-            <button 
-                onClick={handleAutoGenerate}
-                disabled={isGenerating}
-                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm text-sm font-bold hover:translate-y-0.5 hover:shadow-none transition-all disabled:opacity-50"
-            >
-                {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} className="text-neo-yellow fill-neo-yellow" />}
-                Auto-Generate AI
-            </button>
+            {role === 'teacher' && (
+                <button 
+                    onClick={handleAutoGenerate}
+                    disabled={isGenerating}
+                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm text-sm font-bold hover:translate-y-0.5 hover:shadow-none transition-all disabled:opacity-50"
+                >
+                    {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} className="text-neo-yellow fill-neo-yellow" />}
+                    Auto-Generate
+                </button>
+            )}
             <button 
                 onClick={handleExport}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm text-sm font-bold hover:translate-y-0.5 hover:shadow-none transition-all"
@@ -227,16 +239,18 @@ export const Timetable: React.FC = () => {
                     {session ? (
                       <div 
                         onClick={() => openEditModal(session)}
-                        className={`h-full ${session.color || 'bg-violet-300'} border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm p-2 text-xs flex flex-col gap-1 hover:-translate-y-1 transition-transform cursor-pointer relative`}
+                        className={`h-full ${session.color || 'bg-violet-300'} border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm p-2 text-xs flex flex-col gap-1 ${role === 'teacher' ? 'hover:-translate-y-1 cursor-pointer' : ''} transition-transform relative`}
                       >
                         <div className="flex justify-between items-start">
                              <span className="font-bold text-slate-900 uppercase line-clamp-1">{session.subject}</span>
-                             <button 
-                                onClick={(e) => removeClass(session.id, e)}
-                                className="opacity-0 group-hover:opacity-100 text-slate-900 hover:bg-white p-0.5 border border-slate-900 transition-opacity absolute top-1 right-1 z-10"
-                            >
-                                <X size={12} />
-                             </button>
+                             {role === 'teacher' && (
+                                <button 
+                                    onClick={(e) => removeClass(session.id, e)}
+                                    className="opacity-0 group-hover:opacity-100 text-slate-900 hover:bg-white p-0.5 border border-slate-900 transition-opacity absolute top-1 right-1 z-10"
+                                >
+                                    <X size={12} />
+                                </button>
+                             )}
                         </div>
                         {session.code && <span className="font-mono text-[10px] font-bold text-slate-900 bg-white/50 w-fit px-1">{session.code}</span>}
                         <span className="font-mono text-slate-800 font-bold mt-auto">{session.roomId}</span>
@@ -245,18 +259,22 @@ export const Timetable: React.FC = () => {
                              <span className="font-medium truncate text-slate-900">{session.professorName || 'TBA'}</span>
                         </div>
                         
-                        {/* Edit overlay on hover */}
-                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none">
-                            <Edit3 size={16} className="text-slate-900" />
-                        </div>
+                        {/* Edit overlay on hover (Teacher Only) */}
+                        {role === 'teacher' && (
+                            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none">
+                                <Edit3 size={16} className="text-slate-900" />
+                            </div>
+                        )}
                       </div>
                     ) : (
-                      <button 
-                        onClick={() => openAddModal(day, time)}
-                        className="w-full h-full border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-slate-900 dark:hover:border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-slate-400 hover:text-slate-900"
-                      >
-                        <Plus size={24} />
-                      </button>
+                      role === 'teacher' && (
+                        <button 
+                            onClick={() => openAddModal(day, time)}
+                            className="w-full h-full border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-slate-900 dark:hover:border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-slate-400 hover:text-slate-900"
+                        >
+                            <Plus size={24} />
+                        </button>
+                      )
                     )}
                   </div>
                 );

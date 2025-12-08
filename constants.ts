@@ -1,10 +1,11 @@
 
+
 import { Student, Teacher, ClassSession } from './types';
 
 export const STUDENTS: Student[] = [
   {
     id: 's1',
-    name: 'Aarav Patel',
+    name: 'Jayesh Patil',
     rollNumber: 'CS2024001',
     attendance: 92,
     grades: [{ subject: 'Math', score: 88 }, { subject: 'CS', score: 95 }],

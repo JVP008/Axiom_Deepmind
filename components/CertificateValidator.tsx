@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { BadgeCheck, ShieldCheck, Search, XCircle, CheckCircle } from 'lucide-react';
 
@@ -55,7 +56,7 @@ export const CertificateValidator: React.FC = () => {
                     <CheckCircle className="text-green-600 shrink-0" size={32} />
                     <div>
                         <h3 className="text-xl font-black uppercase text-green-700 dark:text-green-400 mb-1">Certificate Valid</h3>
-                        <p className="font-mono text-sm mb-2">Issued to: <span className="font-bold">Aarav Patel</span></p>
+                        <p className="font-mono text-sm mb-2">Issued to: <span className="font-bold">Jayesh Patil</span></p>
                         <p className="font-mono text-sm mb-2">Course: <span className="font-bold">Advanced Computer Science</span></p>
                         <p className="font-mono text-xs text-slate-500">Hash: 0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069</p>
                     </div>

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Timetable } from './components/Timetable';
@@ -13,8 +13,9 @@ import { CertificateValidator } from './components/CertificateValidator';
 import { Wellness } from './components/Wellness';
 import { StudyPlanner } from './components/StudyPlanner';
 import { DoubtSolver } from './components/DoubtSolver';
-import { ModuleId } from './types';
-import { AlertTriangle } from 'lucide-react';
+import { LiveTutor } from './components/LiveTutor';
+import { ModuleId, UserRole } from './types';
+import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { getDropoutAnalysis } from './services/ai';
 import { STUDENTS } from './constants';
 
@@ -37,6 +38,18 @@ const DropoutPredictor = () => {
                 </div>
                 <h2 className="text-3xl font-black uppercase">Dropout Risk Analysis</h2>
              </div>
+             
+             {/* Teacher Context Banner */}
+             <div className="bg-yellow-100 dark:bg-yellow-900/20 border-l-4 border-yellow-500 p-4 mb-6">
+                <div className="flex items-start gap-3">
+                    <ShieldAlert className="text-yellow-600 dark:text-yellow-400 mt-1" />
+                    <div>
+                        <p className="font-bold text-sm uppercase text-yellow-800 dark:text-yellow-200">Confidential Faculty View</p>
+                        <p className="text-xs text-yellow-700 dark:text-yellow-300">AI predictions are based on academic patterns. Use discretion when counseling.</p>
+                    </div>
+                </div>
+             </div>
+
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {STUDENTS.map(s => (
                     <div key={s.id} className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard relative">
@@ -85,13 +98,20 @@ const DropoutPredictor = () => {
 
 function App() {
   const [currentModule, setCurrentModule] = useState<ModuleId>('dashboard');
+  const [userRole, setUserRole] = useState<UserRole>('student');
+
+  // Reset module when switching roles to ensure valid state
+  useEffect(() => {
+    setCurrentModule('dashboard');
+  }, [userRole]);
 
   const renderModule = () => {
     switch (currentModule) {
-      case 'dashboard': return <Dashboard />;
-      case 'timetable': return <Timetable />;
-      case 'attendance': return <Attendance />;
-      case 'students': return <StudentTracker />;
+      case 'dashboard': return <Dashboard role={userRole} />;
+      case 'live': return <LiveTutor />;
+      case 'timetable': return <Timetable role={userRole} />;
+      case 'attendance': return <Attendance role={userRole} />;
+      case 'students': return <StudentTracker role={userRole} />;
       case 'career': return <CareerAdvisor />;
       case 'alumni': return <AlumniSystem />;
       case 'dropout': return <DropoutPredictor />;
@@ -101,12 +121,17 @@ function App() {
       case 'wellness': return <Wellness />;
       case 'study': return <StudyPlanner />;
       case 'doubts': return <DoubtSolver />;
-      default: return <Dashboard />;
+      default: return <Dashboard role={userRole} />;
     }
   };
 
   return (
-    <Layout currentModule={currentModule} onModuleChange={setCurrentModule}>
+    <Layout 
+        currentModule={currentModule} 
+        onModuleChange={setCurrentModule}
+        userRole={userRole}
+        onRoleChange={setUserRole}
+    >
       {renderModule()}
     </Layout>
   );

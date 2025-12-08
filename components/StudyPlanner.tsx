@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
-import { CheckSquare, Flame, Clock, Plus, Play, Pause, RotateCcw, Award } from 'lucide-react';
+import { CheckSquare, Flame, Clock, Plus, Play, Pause, RotateCcw, Award, BrainCircuit, Loader2 } from 'lucide-react';
+import { deconstructStudyGoal } from '../services/ai';
 
 interface Task {
     id: string;
@@ -13,12 +15,11 @@ interface Task {
 export const StudyPlanner: React.FC = () => {
     const [tasks, setTasks] = useState<Task[]>([
         { id: '1', title: 'Complete Calculus Worksheet', subject: 'Math', duration: 45, priority: 'high', completed: false },
-        { id: '2', title: 'Read Chapter 4: Optics', subject: 'Physics', duration: 30, priority: 'medium', completed: true },
-        { id: '3', title: 'Write English Essay Draft', subject: 'English', duration: 60, priority: 'low', completed: false },
     ]);
     const [newTaskTitle, setNewTaskTitle] = useState('');
+    const [isThinking, setIsThinking] = useState(false);
     const [timerActive, setTimerActive] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutes in seconds
+    const [timeLeft, setTimeLeft] = useState(25 * 60);
 
     useEffect(() => {
         let interval: any;
@@ -56,6 +57,34 @@ export const StudyPlanner: React.FC = () => {
         setNewTaskTitle('');
     };
 
+    const handleDeconstruct = async () => {
+        if (!newTaskTitle.trim()) return;
+        setIsThinking(true);
+        try {
+            const subTasks = await deconstructStudyGoal(newTaskTitle);
+            
+            if (subTasks && Array.isArray(subTasks)) {
+                const newTasks = subTasks.map((t: any, i: number) => ({
+                    id: Date.now().toString() + i,
+                    title: t.title,
+                    subject: 'AI Plan',
+                    duration: t.duration,
+                    priority: t.priority || 'medium',
+                    completed: false
+                }));
+                setTasks([...tasks, ...newTasks]);
+                setNewTaskTitle('');
+            } else {
+                addTask(); // Fallback
+            }
+        } catch (e) {
+            console.error(e);
+            addTask();
+        } finally {
+            setIsThinking(false);
+        }
+    };
+
     return (
         <div className="h-full flex flex-col md:flex-row gap-8">
             {/* Main Task Area */}
@@ -65,10 +94,6 @@ export const StudyPlanner: React.FC = () => {
                         <h2 className="text-2xl font-black uppercase">Study Planner</h2>
                         <p className="font-mono text-sm opacity-80">{tasks.filter(t => t.completed).length}/{tasks.length} Tasks Completed</p>
                     </div>
-                    <div className="flex items-center gap-2 bg-red-500 text-white px-3 py-1 border-2 border-white dark:border-slate-900 font-bold shadow-hard-sm">
-                        <Flame size={18} fill="currentColor" />
-                        <span>12 Day Streak</span>
-                    </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-slate-100 shadow-hard p-6">
@@ -77,15 +102,36 @@ export const StudyPlanner: React.FC = () => {
                             type="text" 
                             value={newTaskTitle}
                             onChange={(e) => setNewTaskTitle(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && addTask()}
-                            placeholder="Add a new task..."
+                            onKeyDown={(e) => e.key === 'Enter' && !isThinking && (newTaskTitle ? handleDeconstruct() : addTask())}
+                            placeholder="Add a goal (e.g., 'Master React Hooks')..."
                             className="flex-1 p-3 bg-slate-100 dark:bg-slate-800 border-2 border-slate-900 dark:border-slate-100 outline-none font-medium"
+                            disabled={isThinking}
                         />
                         <button 
                             onClick={addTask}
-                            className="px-4 bg-indigo-600 text-white border-2 border-slate-900 shadow-hard-sm hover:translate-y-0.5 hover:shadow-none transition-all"
+                            disabled={isThinking || !newTaskTitle}
+                            className="px-4 bg-white text-slate-900 border-2 border-slate-900 shadow-hard-sm hover:translate-y-0.5 hover:shadow-none transition-all disabled:opacity-50"
+                            title="Quick Add"
                         >
                             <Plus size={24} />
+                        </button>
+                        <button 
+                            onClick={handleDeconstruct}
+                            disabled={isThinking || !newTaskTitle}
+                            className={`px-4 text-white border-2 border-slate-900 shadow-hard-sm hover:translate-y-0.5 hover:shadow-none transition-all disabled:opacity-80 flex items-center gap-2 ${isThinking ? 'bg-indigo-400 cursor-wait w-48 justify-center' : 'bg-indigo-600'}`}
+                            title="Deconstruct Goal"
+                        >
+                            {isThinking ? (
+                                <>
+                                    <Loader2 size={24} className="animate-spin" />
+                                    <span className="font-bold text-xs uppercase">Planning...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <BrainCircuit size={24} />
+                                    <span className="hidden md:inline font-bold uppercase text-xs">Deconstruct</span>
+                                </>
+                            )}
                         </button>
                      </div>
 
@@ -136,34 +182,6 @@ export const StudyPlanner: React.FC = () => {
                         >
                             <RotateCcw size={20} />
                         </button>
-                    </div>
-                    <p className="mt-4 text-xs font-mono uppercase text-slate-500">Pomodoro Technique • 25m Focus / 5m Break</p>
-                </div>
-
-                {/* Weekly Goals */}
-                <div className="bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-slate-100 shadow-hard p-6">
-                    <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
-                        <Award size={20} /> Weekly Goals
-                    </h3>
-                    <div className="space-y-4">
-                        {[
-                            { label: 'Study Hours', current: 12, target: 20, color: 'bg-blue-400' },
-                            { label: 'Problems Solved', current: 45, target: 50, color: 'bg-green-400' },
-                            { label: 'Chapters Done', current: 3, target: 5, color: 'bg-purple-400' },
-                        ].map((goal, i) => (
-                            <div key={i}>
-                                <div className="flex justify-between text-xs font-bold uppercase mb-1">
-                                    <span>{goal.label}</span>
-                                    <span>{goal.current}/{goal.target}</span>
-                                </div>
-                                <div className="h-3 w-full bg-slate-200 dark:bg-slate-800 border border-slate-900 dark:border-slate-600">
-                                    <div 
-                                        className={`h-full ${goal.color} border-r border-slate-900`} 
-                                        style={{ width: `${(goal.current / goal.target) * 100}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        ))}
                     </div>
                 </div>
             </div>

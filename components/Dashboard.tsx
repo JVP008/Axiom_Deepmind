@@ -4,23 +4,38 @@ import {
   Users, 
   Calendar, 
   TrendingUp, 
-  AlertCircle 
+  AlertCircle,
+  GraduationCap,
+  BookOpen
 } from 'lucide-react';
 import { STUDENTS } from '../constants';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
+import { UserRole } from '../types';
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+    role: UserRole;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ role }) => {
   const totalStudents = STUDENTS.length;
   const avgAttendance = STUDENTS.reduce((acc, s) => acc + s.attendance, 0) / totalStudents;
   const atRiskStudents = STUDENTS.filter(s => s.riskScore > 50).length;
 
-  const data = [
-    { name: 'Mon', attendance: 92 },
-    { name: 'Tue', attendance: 88 },
-    { name: 'Wed', attendance: 95 },
-    { name: 'Thu', attendance: 85 },
-    { name: 'Fri', attendance: 55 },
-    { name: 'Sat', attendance: 25 },
+  const studentData = [
+    { name: 'Mon', attendance: 92, grade: 85 },
+    { name: 'Tue', attendance: 88, grade: 88 },
+    { name: 'Wed', attendance: 95, grade: 82 },
+    { name: 'Thu', attendance: 85, grade: 90 },
+    { name: 'Fri', attendance: 55, grade: 85 },
+    { name: 'Sat', attendance: 25, grade: 95 },
+  ];
+
+  const teacherData = [
+      { name: 'CS101', attendance: 95 },
+      { name: 'CS202', attendance: 82 },
+      { name: 'AI303', attendance: 88 },
+      { name: 'PHY101', attendance: 75 },
+      { name: 'MAT101', attendance: 90 },
   ];
 
   // Helper for color logic for cards
@@ -32,65 +47,137 @@ export const Dashboard: React.FC = () => {
 
   const attColorInfo = getAttendanceColorInfo(avgAttendance);
 
+  if (role === 'teacher') {
+      return (
+        <div className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard 
+                    title="Total Students" 
+                    value="60" 
+                    icon={<Users className="text-slate-900" />} 
+                    trend="2 Absent Today"
+                    color="bg-neo-blue"
+                    shadowColor="shadow-blue-900"
+                />
+                <StatCard 
+                    title="Class Avg" 
+                    value={`${avgAttendance.toFixed(0)}%`} 
+                    icon={<TrendingUp className="text-slate-900" />} 
+                    trend="-2% vs Last Wk"
+                    color={attColorInfo.tailwind}
+                    shadowColor={attColorInfo.shadow}
+                />
+                <StatCard 
+                    title="At Risk" 
+                    value={atRiskStudents.toString()} 
+                    icon={<AlertCircle className="text-slate-900" />} 
+                    trend="Requires Action"
+                    color="bg-red-400"
+                    shadowColor="shadow-red-900"
+                />
+                <StatCard 
+                    title="Pending Grade" 
+                    value="12" 
+                    icon={<BookOpen className="text-slate-900" />} 
+                    trend="Assignments"
+                    color="bg-neo-yellow"
+                    shadowColor="shadow-yellow-900"
+                />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Teacher Chart */}
+                <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
+                    <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 inline-block pb-1 border-slate-900 dark:border-slate-100">Attendance by Course</h3>
+                    <div className="h-64 w-full min-w-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={teacherData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="name" stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
+                                <YAxis stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
+                                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ border: '2px solid currentColor', borderRadius: '0px', boxShadow: '4px 4px 0px 0px currentColor' }} />
+                                <Bar dataKey="attendance" fill="#23EB87" stroke="#000" strokeWidth={2} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Teacher Alerts */}
+                <div className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
+                    <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 border-neo-pink inline-block pb-1">Faculty Alerts</h3>
+                    <div className="space-y-4">
+                        {STUDENTS.filter(s => s.riskScore > 50).map(s => (
+                            <AlertItem 
+                                key={s.id}
+                                type="warning" 
+                                title="Dropout Risk" 
+                                desc={`${s.name} - ${s.riskScore}% Risk Score`} 
+                                time="Today"
+                            />
+                        ))}
+                        <AlertItem 
+                            type="info" 
+                            title="Admin Note" 
+                            desc="Submit grades by Friday" 
+                            time="1h ago"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // STUDENT VIEW
   return (
     <div className="space-y-8">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="Total Students" 
-          value={totalStudents.toString()} 
-          icon={<Users className="text-slate-900" />} 
-          trend="+5%"
-          color="bg-neo-blue"
-          shadowColor="shadow-blue-900"
-        />
-        <StatCard 
-          title="Avg Attendance" 
-          value={`${avgAttendance.toFixed(1)}%`} 
+          title="Attendance" 
+          value="92%" 
           icon={<Calendar className="text-slate-900" />} 
-          trend="+2.1%"
-          color={attColorInfo.tailwind}
-          shadowColor={attColorInfo.shadow}
+          trend="Present Today"
+          color="bg-neo-green"
+          shadowColor="shadow-green-900"
         />
         <StatCard 
-          title="Avg Grades" 
-          value="76.4%" 
-          icon={<TrendingUp className="text-slate-900" />} 
-          trend="+1.2%"
+          title="Avg Grade" 
+          value="88%" 
+          icon={<GraduationCap className="text-slate-900" />} 
+          trend="Top 10%"
           color="bg-neo-pink"
           shadowColor="shadow-pink-900"
         />
         <StatCard 
-          title="At Risk" 
-          value={atRiskStudents.toString()} 
-          icon={<AlertCircle className="text-slate-900" />} 
-          trend="HIGH"
+          title="Assignments" 
+          value="3" 
+          icon={<BookOpen className="text-slate-900" />} 
+          trend="Due this week"
           color="bg-neo-yellow"
           shadowColor="shadow-yellow-900"
+        />
+        <StatCard 
+          title="Rank" 
+          value="#4" 
+          icon={<TrendingUp className="text-slate-900" />} 
+          trend="Class of 60"
+          color="bg-neo-blue"
+          shadowColor="shadow-blue-900"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Chart */}
+        {/* Student Chart */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
-          <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 inline-block pb-1 border-slate-900 dark:border-slate-100">Attendance Trends</h3>
+          <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 inline-block pb-1 border-slate-900 dark:border-slate-100">Performance Trend</h3>
           <div className="h-64 w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
+              <AreaChart data={studentData}>
                 <defs>
-                  {/* Fill Gradient: Green to transparent */}
-                  <linearGradient id="colorAttendance" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#23EB87" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#23EB87" stopOpacity={0}/>
-                  </linearGradient>
-                  
-                  {/* Stroke Gradient: Smooth transition Green -> Yellow -> Red */}
-                  <linearGradient id="strokeGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#23EB87" stopOpacity={1} />
-                    <stop offset="35%" stopColor="#23EB87" stopOpacity={1} />
-                    <stop offset="60%" stopColor="#FFC900" stopOpacity={1} />
-                    <stop offset="85%" stopColor="#EF4444" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#EF4444" stopOpacity={1} />
+                  <linearGradient id="colorGrade" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#4F46E5" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -109,11 +196,18 @@ export const Dashboard: React.FC = () => {
                 <Area 
                     type="monotone" 
                     dataKey="attendance" 
-                    stroke="url(#strokeGradient)" 
+                    stroke="#23EB87" 
+                    strokeWidth={4} 
+                    fillOpacity={0.1} 
+                    fill="#23EB87"
+                />
+                <Area 
+                    type="monotone" 
+                    dataKey="grade" 
+                    stroke="#4F46E5" 
                     strokeWidth={4} 
                     fillOpacity={1} 
-                    fill="url(#colorAttendance)"
-                    activeDot={{ r: 4, strokeWidth: 2, stroke: '#1e293b', fill: '#fff' }} 
+                    fill="url(#colorGrade)"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -122,31 +216,25 @@ export const Dashboard: React.FC = () => {
 
         {/* Recent Activity / Notifications */}
         <div className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
-          <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 border-neo-pink inline-block pb-1">Recent Alerts</h3>
+          <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 border-neo-pink inline-block pb-1">Notifications</h3>
           <div className="space-y-4">
-            <AlertItem 
-              type="warning" 
-              title="Low Attendance" 
-              desc="Diya Sharma < 70%" 
+             <AlertItem 
+              type="success" 
+              title="Achievement Unlocked" 
+              desc="Code Wizard Badge" 
               time="2h ago"
             />
              <AlertItem 
-              type="success" 
-              title="Achievement" 
-              desc="Aarav won Hackathon" 
+              type="info" 
+              title="Homework Due" 
+              desc="Calculus Worksheet" 
               time="5h ago"
             />
              <AlertItem 
-              type="info" 
-              title="System Update" 
-              desc="Timetable v2.0 live" 
-              time="1d ago"
-            />
-             <AlertItem 
               type="warning" 
-              title="Grade Drop" 
-              desc="Rohan in Math" 
-              time="2d ago"
+              title="Library Book" 
+              desc="Due tomorrow" 
+              time="1d ago"
             />
           </div>
         </div>
@@ -169,7 +257,6 @@ const StatCard = ({ title, value, icon, trend, color, shadowColor }: any) => {
       </div>
       <p className="text-xs font-mono mt-4 font-bold flex items-center gap-1 text-slate-900">
         <span className="bg-white px-1 border border-slate-900">{trend}</span>
-        <span className="opacity-70">vs last period</span>
       </p>
     </div>
   );

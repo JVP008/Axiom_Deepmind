@@ -1,6 +1,7 @@
 
 export type ModuleId = 
   | 'dashboard'
+  | 'live'
   | 'timetable'
   | 'attendance'
   | 'students'
@@ -13,6 +14,8 @@ export type ModuleId =
   | 'wellness'
   | 'study'
   | 'doubts';
+
+export type UserRole = 'student' | 'teacher';
 
 export interface Student {
   id: string;
@@ -62,4 +65,5 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
   timestamp: Date;
+  groundingMetadata?: any;
 }

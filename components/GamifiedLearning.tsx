@@ -1,8 +1,10 @@
+
+
 import React, { useState } from 'react';
 import { Trophy, Crown, Medal, Flame, ChevronRight } from 'lucide-react';
 
 const LEADERBOARD = [
-    { rank: 1, name: 'Aarav Patel', points: 2450, streak: 12 },
+    { rank: 1, name: 'Jayesh Patil', points: 2450, streak: 12 },
     { rank: 2, name: 'Meera Reddy', points: 2310, streak: 8 },
     { rank: 3, name: 'Ishaan Kumar', points: 2100, streak: 5 },
     { rank: 4, name: 'Rohan Gupta', points: 1950, streak: 3 },
