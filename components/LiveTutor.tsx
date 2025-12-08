@@ -109,8 +109,16 @@ export const LiveTutor: React.FC = () => {
 
         const { x, y } = getCanvasCoordinates(e, canvas);
 
-        ctx.strokeStyle = wbTool === 'eraser' ? '#ffffff' : wbColor;
-        ctx.lineWidth = wbTool === 'eraser' ? 20 : 3;
+        // Configure tool style
+        if (wbTool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = 20;
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = wbColor;
+            ctx.lineWidth = 3;
+        }
+
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
@@ -118,6 +126,9 @@ export const LiveTutor: React.FC = () => {
         ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
         ctx.lineTo(x, y);
         ctx.stroke();
+        
+        // Reset composite operation to default
+        ctx.globalCompositeOperation = 'source-over';
 
         lastPosRef.current = { x, y };
     };
@@ -136,6 +147,7 @@ export const LiveTutor: React.FC = () => {
         const w = canvas.width;
         const h = canvas.height;
 
+        ctx.globalCompositeOperation = 'source-over';
         ctx.strokeStyle = args.color || '#4F46E5'; // Default indigo
         ctx.lineWidth = 3;
         ctx.lineCap = 'round';
@@ -191,20 +203,39 @@ export const LiveTutor: React.FC = () => {
                     setIsConnected(true);
                     
                     // Start Streaming Whiteboard Frames
+                    // We must flatten the transparent canvas onto a white background so the AI can see it
                     streamIntervalRef.current = window.setInterval(() => {
                         if (whiteboardCanvasRef.current) {
-                            whiteboardCanvasRef.current.toBlob(async (blob) => {
-                                if (blob) {
-                                    const base64Data = await blobToBase64(blob);
-                                    sessionPromise.then(session => {
-                                        session.sendRealtimeInput({
-                                            media: { data: base64Data, mimeType: 'image/jpeg' }
+                            const sourceCanvas = whiteboardCanvasRef.current;
+                            
+                            // Create temporary canvas to flatten image
+                            const tempCanvas = document.createElement('canvas');
+                            tempCanvas.width = sourceCanvas.width;
+                            tempCanvas.height = sourceCanvas.height;
+                            const ctx = tempCanvas.getContext('2d');
+                            
+                            if (ctx) {
+                                // 1. Fill white background
+                                ctx.fillStyle = '#ffffff';
+                                ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                                
+                                // 2. Draw the transparent whiteboard on top
+                                ctx.drawImage(sourceCanvas, 0, 0);
+                                
+                                // 3. Send the flattened JPEG
+                                tempCanvas.toBlob(async (blob) => {
+                                    if (blob) {
+                                        const base64Data = await blobToBase64(blob);
+                                        sessionPromise.then(session => {
+                                            session.sendRealtimeInput({
+                                                media: { data: base64Data, mimeType: 'image/jpeg' }
+                                            });
                                         });
-                                    });
-                                }
-                            }, 'image/jpeg', 0.5);
+                                    }
+                                }, 'image/jpeg', 0.5);
+                            }
                         }
-                    }, 1000); // 1 FPS for whiteboard is sufficient
+                    }, 1000); 
                 },
                 onmessage: async (message: LiveServerMessage) => {
                     // Handle Tool Calls (Drawing)
@@ -276,7 +307,7 @@ export const LiveTutor: React.FC = () => {
                 speechConfig: {
                     voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
                 },
-                systemInstruction: "You are AXIOM, an expert AI tutor helping a student on a digital whiteboard. You can see what the student draws. If you need to explain a concept visually (like math, geometry, or diagrams), call the 'drawOnWhiteboard' tool. Be encouraging and helpful.",
+                systemInstruction: "You are AXIOM, an expert AI tutor helping a student on a digital whiteboard. You can see what the student draws because the system sends you snapshots. If the board looks blank, ask the student to draw something. If you need to explain a concept visually (like math, geometry, or diagrams), call the 'drawOnWhiteboard' tool. Be encouraging and helpful.",
             }
         });
         
