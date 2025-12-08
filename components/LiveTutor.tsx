@@ -1,8 +1,7 @@
 
-
 import React, { useEffect, useRef, useState } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Zap, Activity } from 'lucide-react';
+import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
+import { Mic, MicOff, PhoneOff, Zap, PenTool, Eraser, Trash2, X, Activity } from 'lucide-react';
 import { blobToBase64, base64ToUint8Array, floatTo16BitPCM, arrayBufferToBase64 } from '../services/ai';
 
 // Helper to downsample audio to 16kHz
@@ -25,57 +24,137 @@ function resampleTo16k(audioData: Float32Array, origSampleRate: number): Float32
   return result;
 }
 
+// Tool Definition for AI Drawing
+const whiteboardTool: FunctionDeclaration = {
+  name: 'drawOnWhiteboard',
+  description: 'Draw on the student\'s whiteboard to explain concepts. Use 0-100 coordinate system (percentage of screen).',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      action: { type: Type.STRING, enum: ['line', 'rect', 'text', 'clear'], description: 'Type of drawing action' },
+      x1: { type: Type.NUMBER, description: 'Start X (0-100)' },
+      y1: { type: Type.NUMBER, description: 'Start Y (0-100)' },
+      x2: { type: Type.NUMBER, description: 'End X (0-100) or Width' },
+      y2: { type: Type.NUMBER, description: 'End Y (0-100) or Height' },
+      text: { type: Type.STRING, description: 'Text content for text action' },
+      color: { type: Type.STRING, description: 'Hex color code' }
+    },
+    required: ['action']
+  }
+};
+
 export const LiveTutor: React.FC = () => {
     const [isConnected, setIsConnected] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoEnabled, setIsVideoEnabled] = useState(true);
-    const [audioLevel, setAudioLevel] = useState(0);
-
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    
+    // Whiteboard State
+    const [wbColor, setWbColor] = useState('#000000'); // Default black
+    const [wbTool, setWbTool] = useState<'pen' | 'eraser'>('pen');
+    
+    const whiteboardCanvasRef = useRef<HTMLCanvasElement>(null);
+    
     const audioCtxRef = useRef<AudioContext | null>(null);
     const inputCtxRef = useRef<AudioContext | null>(null);
     const inputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const processorRef = useRef<ScriptProcessorNode | null>(null);
-    const sessionRef = useRef<any>(null); // To store the resolved session
+    const sessionRef = useRef<Promise<any> | null>(null); 
     
     // Playback state
     const nextStartTimeRef = useRef<number>(0);
     const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
-    // Mute Ref to handle closure staleness
+    // Refs for closures
     const isMutedRef = useRef(false);
+
     useEffect(() => {
         isMutedRef.current = isMuted;
     }, [isMuted]);
 
-    // Video Streaming Interval
-    const videoIntervalRef = useRef<number | null>(null);
+    // Drawing Refs
+    const isDrawingRef = useRef(false);
+    const lastPosRef = useRef({ x: 0, y: 0 });
 
-    useEffect(() => {
-        // Init Camera
-        const initCamera = async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 640, height: 480 },
-                    audio: false // Audio handled separately for processing
-                });
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                }
-            } catch (e) {
-                console.error("Camera access failed", e);
-                setIsVideoEnabled(false);
-            }
+    // Streaming Interval
+    const streamIntervalRef = useRef<number | null>(null);
+
+    // Whiteboard Drawing Logic (Local)
+    const getCanvasCoordinates = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        
+        // Calculate scale factor in case canvas is resized via CSS
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
         };
-        if (isVideoEnabled) initCamera();
-        return () => {
-            if (videoRef.current && videoRef.current.srcObject) {
-                const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-                tracks.forEach(t => t.stop());
-            }
-        };
-    }, [isVideoEnabled]);
+    };
+
+    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+        const canvas = whiteboardCanvasRef.current;
+        if (!canvas) return;
+        
+        isDrawingRef.current = true;
+        lastPosRef.current = getCanvasCoordinates(e, canvas);
+    };
+
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawingRef.current || !whiteboardCanvasRef.current) return;
+        const canvas = whiteboardCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const { x, y } = getCanvasCoordinates(e, canvas);
+
+        ctx.strokeStyle = wbTool === 'eraser' ? '#ffffff' : wbColor;
+        ctx.lineWidth = wbTool === 'eraser' ? 20 : 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        lastPosRef.current = { x, y };
+    };
+
+    const stopDrawing = () => {
+        isDrawingRef.current = false;
+    };
+
+    // AI Drawing Execution
+    const executeAiDrawing = (args: any) => {
+        const canvas = whiteboardCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        ctx.strokeStyle = args.color || '#4F46E5'; // Default indigo
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+
+        if (args.action === 'clear') {
+            ctx.clearRect(0, 0, w, h);
+        } else if (args.action === 'line') {
+            ctx.beginPath();
+            ctx.moveTo((args.x1 / 100) * w, (args.y1 / 100) * h);
+            ctx.lineTo((args.x2 / 100) * w, (args.y2 / 100) * h);
+            ctx.stroke();
+        } else if (args.action === 'rect') {
+            ctx.strokeRect((args.x1 / 100) * w, (args.y1 / 100) * h, (args.x2 / 100) * w, (args.y2 / 100) * h);
+        } else if (args.action === 'text') {
+            ctx.fillStyle = args.color || '#000000';
+            ctx.font = '20px "Space Mono"';
+            ctx.fillText(args.text || '', (args.x1 / 100) * w, (args.y1 / 100) * h);
+        }
+    };
 
     const connect = async () => {
         const apiKey = process.env.API_KEY;
@@ -84,14 +163,11 @@ export const LiveTutor: React.FC = () => {
             return;
         }
 
-        // Initialize Audio Contexts
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        
-        // Output Context (Speaker) - Use system default rate to avoid mismatch errors
         const audioCtx = new AudioContextClass(); 
         audioCtxRef.current = audioCtx;
         
-        // Input Audio (Mic) - Use system default rate
+        // Only request audio
         const inputStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const inputCtx = new AudioContextClass(); 
         inputCtxRef.current = inputCtx;
@@ -114,18 +190,10 @@ export const LiveTutor: React.FC = () => {
                     console.log("AXIOM LIVE: Connected");
                     setIsConnected(true);
                     
-                    // Start Video Streaming
-                    if (canvasRef.current && videoRef.current) {
-                        videoIntervalRef.current = window.setInterval(() => {
-                            if (!videoRef.current || !canvasRef.current) return;
-                            const ctx = canvasRef.current.getContext('2d');
-                            if (!ctx) return;
-                            
-                            canvasRef.current.width = videoRef.current.videoWidth;
-                            canvasRef.current.height = videoRef.current.videoHeight;
-                            ctx.drawImage(videoRef.current, 0, 0);
-                            
-                            canvasRef.current.toBlob(async (blob) => {
+                    // Start Streaming Whiteboard Frames
+                    streamIntervalRef.current = window.setInterval(() => {
+                        if (whiteboardCanvasRef.current) {
+                            whiteboardCanvasRef.current.toBlob(async (blob) => {
                                 if (blob) {
                                     const base64Data = await blobToBase64(blob);
                                     sessionPromise.then(session => {
@@ -134,20 +202,39 @@ export const LiveTutor: React.FC = () => {
                                         });
                                     });
                                 }
-                            }, 'image/jpeg', 0.6);
-                        }, 1000); // 1 FPS for stability
-                    }
+                            }, 'image/jpeg', 0.5);
+                        }
+                    }, 1000); // 1 FPS for whiteboard is sufficient
                 },
                 onmessage: async (message: LiveServerMessage) => {
-                    // Handle Audio Response
+                    // Handle Tool Calls (Drawing)
+                    if (message.toolCall) {
+                        sessionPromise.then(session => {
+                            const responses = message.toolCall?.functionCalls.map(fc => {
+                                if (fc.name === 'drawOnWhiteboard') {
+                                    executeAiDrawing(fc.args);
+                                    return {
+                                        id: fc.id,
+                                        name: fc.name,
+                                        response: { result: 'success' }
+                                    };
+                                }
+                                return {
+                                    id: fc.id,
+                                    name: fc.name,
+                                    response: { result: 'error: tool not found' }
+                                };
+                            });
+                            session.sendToolResponse({ functionResponses: responses });
+                        });
+                    }
+
+                    // Handle Audio
                     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
                     if (base64Audio && audioCtxRef.current) {
                         const ctx = audioCtxRef.current;
                         const audioData = base64ToUint8Array(base64Audio);
-                        
-                        // Decode PCM
                         const dataInt16 = new Int16Array(audioData.buffer);
-                        // Create buffer with the Model's sample rate (24kHz), context will handle resampling
                         const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
                         const channelData = buffer.getChannelData(0);
                         for (let i = 0; i < dataInt16.length; i++) {
@@ -158,7 +245,6 @@ export const LiveTutor: React.FC = () => {
                         source.buffer = buffer;
                         source.connect(ctx.destination);
                         
-                        // Schedule
                         const currentTime = ctx.currentTime;
                         if (nextStartTimeRef.current < currentTime) {
                             nextStartTimeRef.current = currentTime;
@@ -168,13 +254,8 @@ export const LiveTutor: React.FC = () => {
                         
                         sourcesRef.current.add(source);
                         source.onended = () => sourcesRef.current.delete(source);
-
-                        // Visualizer fake (for demo)
-                        setAudioLevel(Math.random() * 100);
-                        setTimeout(() => setAudioLevel(0), buffer.duration * 1000);
                     }
 
-                    // Handle Interruption
                     if (message.serverContent?.interrupted) {
                         sourcesRef.current.forEach(s => s.stop());
                         sourcesRef.current.clear();
@@ -183,7 +264,6 @@ export const LiveTutor: React.FC = () => {
                 },
                 onclose: () => {
                     setIsConnected(false);
-                    console.log("AXIOM LIVE: Closed");
                 },
                 onerror: (err) => {
                     console.error("AXIOM LIVE Error:", err);
@@ -191,28 +271,20 @@ export const LiveTutor: React.FC = () => {
                 }
             },
             config: {
+                tools: [{ functionDeclarations: [whiteboardTool] }],
                 responseModalities: [Modality.AUDIO],
                 speechConfig: {
                     voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
                 },
-                systemInstruction: "You are AXIOM, a highly intelligent, real-time AI tutor. You are helpful, energetic, and concise. You can see the student via video. If they show you a math problem, guide them through it. If they look confused, ask if they need help.",
+                systemInstruction: "You are AXIOM, an expert AI tutor helping a student on a digital whiteboard. You can see what the student draws. If you need to explain a concept visually (like math, geometry, or diagrams), call the 'drawOnWhiteboard' tool. Be encouraging and helpful.",
             }
         });
         
-        // Audio Processor
         processor.onaudioprocess = (e) => {
             if (isMutedRef.current) return;
             const inputData = e.inputBuffer.getChannelData(0);
             
-            // Visualizer logic (using original rate data)
-            let sum = 0;
-            for(let i=0; i<inputData.length; i++) sum += inputData[i] * inputData[i];
-            setAudioLevel(Math.sqrt(sum / inputData.length) * 500);
-
-            // Resample to 16kHz for model
             const resampledData = resampleTo16k(inputData, inputCtx.sampleRate);
-
-            // Create PCM Blob using safer encoding
             const pcmBuffer = floatTo16BitPCM(resampledData);
             const base64String = arrayBufferToBase64(pcmBuffer);
             
@@ -239,99 +311,122 @@ export const LiveTutor: React.FC = () => {
         if (inputCtxRef.current) inputCtxRef.current.close();
         if (processorRef.current) processorRef.current.disconnect();
         if (inputSourceRef.current) inputSourceRef.current.disconnect();
-        if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+        if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
         
         setIsConnected(false);
-        setAudioLevel(0);
+    };
+
+    const clearWhiteboard = () => {
+        const canvas = whiteboardCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
 
     return (
-        <div className="h-full flex flex-col bg-black text-white relative overflow-hidden">
-            {/* Background Grid */}
-            <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" style={{
-                backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)',
-                backgroundSize: '40px 40px'
+        <div className="h-full flex flex-col bg-white relative overflow-hidden border-2 border-slate-900 shadow-hard">
+            {/* Dot Grid Background */}
+            <div className="absolute inset-0 z-0 pointer-events-none opacity-20" style={{
+                backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
+                backgroundSize: '20px 20px'
             }}></div>
 
-            {/* Main Video Area */}
-            <div className="flex-1 relative flex items-center justify-center z-10">
-                {!isConnected ? (
-                    <div className="text-center space-y-6 animate-in zoom-in duration-300">
-                        <div className="w-24 h-24 mx-auto bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(239,68,68,0.5)] animate-pulse">
-                            <Zap size={48} className="text-black fill-current" />
-                        </div>
-                        <h1 className="text-4xl font-black uppercase tracking-widest">AXIOM LIVE</h1>
-                        <p className="font-mono text-gray-400 max-w-md mx-auto">
-                            Connect to the neural network for real-time, multimodal tutoring.
-                            Camera and Microphone required.
-                        </p>
-                        <button 
-                            onClick={connect}
-                            className="px-8 py-4 bg-white text-black font-black uppercase text-xl hover:scale-105 transition-transform"
-                        >
-                            Initialize System
-                        </button>
-                    </div>
-                ) : (
-                    <div className="relative w-full h-full">
-                        <video 
-                            ref={videoRef} 
-                            autoPlay 
-                            muted 
-                            playsInline 
-                            className={`w-full h-full object-cover transition-opacity ${isVideoEnabled ? 'opacity-100' : 'opacity-0'}`} 
-                        />
-                        
-                        {/* AI Hologram Overlay */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className={`w-32 h-32 rounded-full border-4 border-white/20 flex items-center justify-center backdrop-blur-sm transition-all duration-100`} 
-                                 style={{ transform: `scale(${1 + audioLevel / 50})` }}>
-                                <div className="w-24 h-24 rounded-full bg-red-500/20 flex items-center justify-center animate-pulse">
-                                    <Activity size={48} className="text-red-500" />
-                                </div>
-                            </div>
-                        </div>
+            {/* Whiteboard Layer */}
+            <canvas 
+                ref={whiteboardCanvasRef}
+                width={1200}
+                height={800}
+                className="absolute inset-0 w-full h-full cursor-crosshair touch-none z-10"
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                onTouchStart={startDrawing}
+                onTouchMove={draw}
+                onTouchEnd={stopDrawing}
+            />
 
-                        {/* Status Overlay */}
-                        <div className="absolute top-6 left-6 flex items-center gap-4">
-                            <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 border border-red-500 text-red-500 text-xs font-bold uppercase">
-                                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
-                                Live
-                            </div>
-                            <div className="font-mono text-xs text-white/50">
-                                LATENCY: 124ms
-                            </div>
-                        </div>
-                    </div>
-                )}
+            {/* Top Toolbar: Tools & Colors */}
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 bg-white p-2 border-2 border-slate-900 shadow-hard-sm rounded-full">
+                <button 
+                    onClick={() => setWbTool('pen')} 
+                    className={`p-2 rounded-full transition-all ${wbTool === 'pen' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                    title="Pen"
+                >
+                    <PenTool size={20} />
+                </button>
                 
-                {/* Hidden Canvas for Frame Capture */}
-                <canvas ref={canvasRef} className="hidden" />
+                <div className="w-px h-6 bg-slate-200"></div>
+                
+                {['#000000', '#ef4444', '#22c55e', '#3b82f6', '#eab308'].map(c => (
+                    <button 
+                    key={c}
+                    onClick={() => { setWbColor(c); setWbTool('pen'); }}
+                    className={`w-6 h-6 rounded-full border-2 ${wbColor === c && wbTool === 'pen' ? 'border-slate-900 scale-125' : 'border-transparent hover:scale-110'}`}
+                    style={{ backgroundColor: c }}
+                    />
+                ))}
+                
+                <div className="w-px h-6 bg-slate-200"></div>
+
+                <button 
+                    onClick={() => setWbTool('eraser')} 
+                    className={`p-2 rounded-full transition-all ${wbTool === 'eraser' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                    title="Eraser"
+                >
+                    <Eraser size={20} />
+                </button>
+                <button 
+                    onClick={clearWhiteboard} 
+                    className="p-2 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    title="Clear Board"
+                >
+                    <Trash2 size={20} />
+                </button>
             </div>
 
-            {/* Controls Bar */}
+            {/* Bottom Toolbar: Connection Controls */}
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
+                {!isConnected ? (
+                    <button 
+                        onClick={connect}
+                        className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold uppercase border-2 border-slate-900 shadow-hard hover:translate-y-1 hover:shadow-none transition-all rounded-full"
+                    >
+                        <Zap size={20} className="fill-current" />
+                        Connect AI Tutor
+                    </button>
+                ) : (
+                    <div className="flex items-center gap-4 bg-slate-900 p-2 pl-6 pr-2 rounded-full shadow-hard-sm border-2 border-slate-900">
+                        <div className="flex items-center gap-2 mr-2">
+                             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                             <span className="text-white font-bold text-xs uppercase tracking-wider">Live</span>
+                        </div>
+                        
+                        <button 
+                            onClick={() => setIsMuted(!isMuted)}
+                            className={`p-3 rounded-full transition-colors ${isMuted ? 'bg-red-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                        >
+                            {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                        </button>
+                        
+                        <button 
+                            onClick={disconnect}
+                            className="px-4 py-2 bg-red-600 text-white font-bold uppercase text-xs rounded-full hover:bg-red-700 transition-colors flex items-center gap-2"
+                        >
+                            <PhoneOff size={16} /> End
+                        </button>
+                    </div>
+                )}
+            </div>
+            
+            {/* Status Indicator when drawing */}
             {isConnected && (
-                <div className="h-24 bg-black/80 border-t border-white/10 flex items-center justify-center gap-8 backdrop-blur-md z-20">
-                    <button 
-                        onClick={() => setIsMuted(!isMuted)}
-                        className={`p-4 rounded-full border-2 ${isMuted ? 'bg-red-500 border-red-500 text-white' : 'border-white/20 text-white hover:bg-white/10'}`}
-                    >
-                        {isMuted ? <MicOff /> : <Mic />}
-                    </button>
-                    
-                    <button 
-                        onClick={disconnect}
-                        className="px-8 py-4 bg-red-600 rounded-full text-white font-bold uppercase hover:bg-red-700 transition-colors flex items-center gap-2"
-                    >
-                        <PhoneOff size={20} /> End Session
-                    </button>
-
-                    <button 
-                        onClick={() => setIsVideoEnabled(!isVideoEnabled)}
-                        className={`p-4 rounded-full border-2 ${!isVideoEnabled ? 'bg-red-500 border-red-500 text-white' : 'border-white/20 text-white hover:bg-white/10'}`}
-                    >
-                        {isVideoEnabled ? <Video /> : <VideoOff />}
-                    </button>
+                <div className="absolute top-6 left-6 z-20 bg-white/90 backdrop-blur border-2 border-slate-900 p-3 shadow-hard-sm">
+                    <p className="font-mono text-xs font-bold text-slate-500 uppercase mb-1">AI Status</p>
+                    <div className="flex items-center gap-2">
+                        <Activity size={16} className="text-indigo-600" />
+                        <span className="text-sm font-bold">Observing Board...</span>
+                    </div>
                 </div>
             )}
         </div>
