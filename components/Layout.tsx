@@ -33,6 +33,7 @@ interface LayoutProps {
 
 const STUDENT_MENU: { id: ModuleId; label: string; icon: React.ReactNode; color: string; special?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, color: 'bg-neo-blue' },
+  { id: 'live', label: 'AXIOM Live', icon: <Zap size={20} className="fill-current" />, color: 'bg-red-500', special: true },
   { id: 'timetable', label: 'My Timetable', icon: <CalendarDays size={20} />, color: 'bg-neo-pink' },
   { id: 'attendance', label: 'My Attendance', icon: <ClipboardCheck size={20} />, color: 'bg-neo-green' },
   { id: 'study', label: 'Study Planner', icon: <CheckSquare size={20} />, color: 'bg-purple-400' },
@@ -42,7 +43,6 @@ const STUDENT_MENU: { id: ModuleId; label: string; icon: React.ReactNode; color:
   { id: 'hub', label: 'Learning Hub', icon: <Library size={20} />, color: 'bg-teal-400' },
   { id: 'wellness', label: 'Wellness Center', icon: <Heart size={20} />, color: 'bg-red-400' },
   { id: 'validator', label: 'Cert Validator', icon: <BadgeCheck size={20} />, color: 'bg-sky-400' },
-  { id: 'live', label: 'AXIOM Live', icon: <Zap size={20} className="fill-current" />, color: 'bg-red-500', special: true },
 ];
 
 const TEACHER_MENU: { id: ModuleId; label: string; icon: React.ReactNode; color: string; special?: boolean }[] = [
@@ -86,7 +86,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentModule, onModuleChange, u
       {/* Mobile Sidebar Overlay */}
       {isMobile && isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-20 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
@@ -94,7 +94,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentModule, onModuleChange, u
       {/* Sidebar */}
       <aside 
         className={`
-          fixed lg:static inset-y-0 left-0 z-30
+          fixed lg:static inset-y-0 left-0 z-50
           w-64 bg-white dark:bg-slate-900 border-r-2 border-slate-900 dark:border-slate-100
           transform transition-transform duration-300 ease-in-out
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-20 xl:w-64'}

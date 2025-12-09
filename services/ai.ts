@@ -1,5 +1,3 @@
-
-
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Student } from "../types";
 
@@ -98,7 +96,7 @@ export const solveDoubtWithImage = async (message: string, imageFile?: File, use
     }
 
     const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash-lite',
       contents: { parts: contentParts },
       config: config
     });
@@ -158,7 +156,7 @@ export const deconstructStudyGoal = async (goal: string) => {
 
     try {
         const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-lite',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
@@ -196,7 +194,7 @@ export const getCareerAdvice = async (student: Student) => {
 
   try {
      const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-lite',
         contents: prompt,
         config: { 
             responseMimeType: 'application/json',
@@ -237,7 +235,7 @@ export const getDropoutAnalysis = async (student: Student) => {
 
     try {
         const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-lite',
             contents: `Analyze dropout risk for student: ${JSON.stringify(student)}. Keep it under 15 words.`,
         });
         return response.text;

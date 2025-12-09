@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { STUDENTS } from '../constants';
-import { QrCode, Search, Filter, Save, CheckSquare, Check, Loader2 } from 'lucide-react';
+import { QrCode, Search, Filter, Save, CheckSquare, Check, Loader2, X } from 'lucide-react';
 import { UserRole } from '../types';
 
 interface AttendanceProps {
@@ -11,6 +11,7 @@ interface AttendanceProps {
 export const Attendance: React.FC<AttendanceProps> = ({ role }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const handleSave = () => {
       setIsSaving(true);
@@ -28,7 +29,37 @@ export const Attendance: React.FC<AttendanceProps> = ({ role }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+       {/* QR Modal */}
+       {isQrModalOpen && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in zoom-in duration-200">
+               <div className="bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-slate-100 shadow-hard w-full max-w-sm p-6 relative flex flex-col items-center">
+                   <button 
+                       onClick={() => setIsQrModalOpen(false)}
+                       className="absolute top-4 right-4 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                   >
+                       <X size={24} />
+                   </button>
+                   
+                   <h3 className="text-xl font-black uppercase mb-2">Digital Pass</h3>
+                   <p className="font-mono text-xs text-slate-500 mb-6 text-center">Scan this code at the classroom entrance</p>
+                   
+                   <div className="p-4 bg-white border-2 border-slate-900 shadow-hard-sm mb-6">
+                       <img 
+                           src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=AXIOM-ATTENDANCE-${Date.now()}`} 
+                           alt="Attendance QR" 
+                           className="w-48 h-48"
+                       />
+                   </div>
+                   
+                   <div className="flex items-center gap-2 text-green-600 font-bold uppercase text-sm animate-pulse">
+                       <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                       Token Active
+                   </div>
+               </div>
+           </div>
+       )}
+
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h2 className="text-2xl font-black uppercase">{role === 'teacher' ? 'Mark Class Attendance' : 'My Attendance'}</h2>
@@ -36,7 +67,10 @@ export const Attendance: React.FC<AttendanceProps> = ({ role }) => {
         </div>
         <div className="flex gap-3 w-full md:w-auto">
             {role === 'student' ? (
-                <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm text-sm font-bold hover:translate-y-0.5 hover:shadow-none transition-all">
+                <button 
+                    onClick={() => setIsQrModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border-2 border-slate-900 dark:border-slate-100 shadow-hard-sm text-sm font-bold hover:translate-y-0.5 hover:shadow-none transition-all"
+                >
                     <QrCode size={16} />
                     SCAN QR
                 </button>
