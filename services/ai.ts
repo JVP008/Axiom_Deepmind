@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Student } from "../types";
 
@@ -9,6 +10,25 @@ const getClient = () => {
   const apiKey = getApiKey();
   if (!apiKey) return null;
   return new GoogleGenAI({ apiKey });
+};
+
+// --- HELPER: SAFE JSON PARSE ---
+const safeJsonParse = (text: string) => {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Check for markdown code blocks (```json ... ``` or just ``` ... ```)
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match) {
+      try {
+        return JSON.parse(match[1]);
+      } catch (e2) {
+        console.error("JSON Parse Error (Inner):", e2);
+      }
+    }
+    console.error("JSON Parse Error:", e);
+    return null;
+  }
 };
 
 // --- LIVE API HELPERS ---
@@ -96,7 +116,7 @@ export const solveDoubtWithImage = async (message: string, imageFile?: File, use
     }
 
     const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-2.5-flash',
       contents: { parts: contentParts },
       config: config
     });
@@ -156,7 +176,7 @@ export const deconstructStudyGoal = async (goal: string) => {
 
     try {
         const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash-lite',
+            model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
@@ -174,7 +194,7 @@ export const deconstructStudyGoal = async (goal: string) => {
             }
         });
 
-        if (response.text) return JSON.parse(response.text);
+        if (response.text) return safeJsonParse(response.text);
         return null;
     } catch (error) {
         console.error("Planner Error:", error);
@@ -194,7 +214,7 @@ export const getCareerAdvice = async (student: Student) => {
 
   try {
      const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: { 
             responseMimeType: 'application/json',
@@ -218,7 +238,7 @@ export const getCareerAdvice = async (student: Student) => {
             }
         }
      });
-     if (response.text) return JSON.parse(response.text);
+     if (response.text) return safeJsonParse(response.text);
   } catch (e) {
       console.error(e);
   }
@@ -235,7 +255,7 @@ export const getDropoutAnalysis = async (student: Student) => {
 
     try {
         const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash-lite',
+            model: 'gemini-2.5-flash',
             contents: `Analyze dropout risk for student: ${JSON.stringify(student)}. Keep it under 15 words.`,
         });
         return response.text;
@@ -244,10 +264,65 @@ export const getDropoutAnalysis = async (student: Student) => {
     }
 };
 
-export const chatWithBot = async (history: any[], message: string) => {
-    // Basic chat fallback
-    const res = await solveDoubtWithImage(message);
-    return res.text;
+// --- GLOBAL CHATBOT (RESTRICTED TO APP CONTEXT) ---
+export const chatWithBot = async (history: {role: string, text: string}[], message: string) => {
+    const client = getClient();
+    if (!client) return "AI Offline. Check API Key.";
+
+    // Strictly limit the chatbot to the application domain
+    const systemInstruction = `You are AXIOM_BOT, the dedicated AI assistant for the AXIOM Education Platform.
+Your ONLY purpose is to assist users with the AXIOM web application.
+You must NOT answer general knowledge questions, solve math problems, or discuss topics unrelated to the AXIOM interface and features.
+
+The AXIOM platform includes these modules:
+1. Dashboard: Overview of stats, attendance, and grades.
+2. AXIOM Live: Real-time video tutoring with interactive whiteboard.
+3. Timetable: Class scheduling for students and teachers.
+4. Attendance: QR-based tracking and manual entry.
+5. Student Tracker: Gamified profile with badges and achievements.
+6. Career Advisor: AI-based career path suggestions.
+7. Alumni Network: Directory of graduates and mentorship.
+8. Dropout Risk Analysis: Predictive analytics for teachers (Confidential).
+9. Gamified Learning: Quiz battles and leaderboards.
+10. Learning Hub: Video and document library.
+11. Certificate Validator: Blockchain verification of credentials.
+12. Wellness Center: Mood tracking, breathing exercises, and AI meditation.
+13. Study Planner: AI-powered task breakdown and focus timer.
+14. Doubt Solver: The place to ask academic questions (Not here in the global chat).
+
+If a user asks a general question (e.g. "What is 2+2?", "Who is the president?", "Write code"), politely refuse and guide them to the specific module (e.g., "For academic help, please use the Doubt Solver module.").
+If a user asks about the app (e.g. "How do I check attendance?", "Where is the whiteboard?"), answer helpfully and concisely.`;
+
+    try {
+        // Convert simple history to API format if needed, or just use sendChat if keeping state locally in component
+        // Since the component manages state, we'll try to sync it, but simple generation with history is easier for this stateless function style
+        // Construct the history for the model
+        const chatHistory = history.map(h => ({
+            role: h.role === 'model' ? 'model' : 'user',
+            parts: [{ text: h.text }]
+        }));
+
+        // Remove the last message from history as it is the current message we are sending
+        // The component likely appends the user message to history before calling this.
+        // Actually, looking at Chatbot.tsx: setMessages(prev => [...prev, userMsg]); then calls chatWithBot(history...)
+        // So history contains the new message? No, "const history = messages.map..." is derived from state *before* the new message is fully committed?
+        // In Chatbot.tsx:
+        // setMessages(prev => [...prev, userMsg]);
+        // const history = messages.map... -> This uses the OLD 'messages' state because setMessages is async/batched.
+        // So 'message' is the new one, 'history' is the past. This is correct.
+
+        const chat = client.chats.create({
+            model: 'gemini-2.5-flash',
+            config: { systemInstruction },
+            history: chatHistory
+        });
+
+        const result = await chat.sendMessage({ message });
+        return result.text;
+    } catch (error) {
+        console.error("Global Chat Error:", error);
+        return "System Malfunction. Unable to process request.";
+    }
 };
 
 export const generateTimetable = async () => {

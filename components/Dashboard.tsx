@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   Users, 
@@ -6,10 +5,30 @@ import {
   TrendingUp, 
   AlertCircle,
   GraduationCap,
-  BookOpen
+  BookOpen,
+  Clock,
+  Target
 } from 'lucide-react';
 import { STUDENTS } from '../constants';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  Radar, 
+  RadarChart, 
+  PolarGrid, 
+  PolarAngleAxis, 
+  PolarRadiusAxis,
+  AreaChart,
+  Area,
+  ComposedChart,
+  Line
+} from 'recharts';
 import { UserRole } from '../types';
 
 interface DashboardProps {
@@ -21,13 +40,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ role }) => {
   const avgAttendance = STUDENTS.reduce((acc, s) => acc + s.attendance, 0) / totalStudents;
   const atRiskStudents = STUDENTS.filter(s => s.riskScore > 50).length;
 
-  const studentData = [
-    { name: 'Mon', attendance: 92, grade: 85 },
-    { name: 'Tue', attendance: 88, grade: 88 },
-    { name: 'Wed', attendance: 95, grade: 82 },
-    { name: 'Thu', attendance: 85, grade: 90 },
-    { name: 'Fri', attendance: 55, grade: 85 },
-    { name: 'Sat', attendance: 25, grade: 95 },
+  // --- CHART DATA ---
+
+  // 1. RADAR: Subject Mastery (Me vs Class)
+  const subjectData = [
+    { subject: 'Math', me: 88, classAvg: 75, fullMark: 100 },
+    { subject: 'CS', me: 95, classAvg: 82, fullMark: 100 },
+    { subject: 'Physics', me: 72, classAvg: 78, fullMark: 100 },
+    { subject: 'AI/ML', me: 92, classAvg: 85, fullMark: 100 },
+    { subject: 'Ethics', me: 85, classAvg: 88, fullMark: 100 },
+    { subject: 'English', me: 78, classAvg: 80, fullMark: 100 },
+  ];
+
+  // 2. AREA: Academic Trajectory (Time Trend)
+  const trendData = [
+    { month: 'Sep', grade: 65, avg: 70 },
+    { month: 'Oct', grade: 75, avg: 72 },
+    { month: 'Nov', grade: 82, avg: 74 },
+    { month: 'Dec', grade: 78, avg: 76 },
+    { month: 'Jan', grade: 88, avg: 78 },
+    { month: 'Feb', grade: 92, avg: 80 },
+  ];
+
+  // 3. COMPOSED: Study Efficiency (Hours vs Grade)
+  const efficiencyData = [
+      { subject: 'Math', hours: 12, grade: 88 }, // High effort, Good result
+      { subject: 'CS', hours: 8, grade: 95 },    // Low effort, High result (Efficient)
+      { subject: 'Physics', hours: 15, grade: 72 }, // High effort, Low result (Needs help)
+      { subject: 'AI/ML', hours: 10, grade: 92 },
+      { subject: 'English', hours: 4, grade: 78 },
   ];
 
   const teacherData = [
@@ -46,6 +87,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ role }) => {
   };
 
   const attColorInfo = getAttendanceColorInfo(avgAttendance);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-2 border-2 border-slate-900 shadow-hard-sm text-xs font-mono">
+          <p className="font-bold uppercase mb-1">{label}</p>
+          {payload.map((p: any, idx: number) => (
+              <p key={idx} style={{ color: p.color }} className="font-bold">
+                  {p.name}: {p.value}
+              </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   if (role === 'teacher') {
       return (
@@ -90,12 +147,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ role }) => {
                 <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
                     <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 inline-block pb-1 border-slate-900 dark:border-slate-100">Attendance by Course</h3>
                     <div className="h-64 w-full min-w-0">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={teacherData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis dataKey="name" stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
                                 <YAxis stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
-                                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ border: '2px solid currentColor', borderRadius: '0px', boxShadow: '4px 4px 0px 0px currentColor' }} />
+                                <Tooltip cursor={{fill: 'transparent'}} content={<CustomTooltip />} />
                                 <Bar dataKey="attendance" fill="#23EB87" stroke="#000" strokeWidth={2} />
                             </BarChart>
                         </ResponsiveContainer>
@@ -167,76 +224,123 @@ export const Dashboard: React.FC<DashboardProps> = ({ role }) => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Student Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
-          <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 inline-block pb-1 border-slate-900 dark:border-slate-100">Performance Trend</h3>
+      {/* Main Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* CHART 1: Subject Mastery (Radar) */}
+        <div className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
+          <div className="flex justify-between items-center mb-2 border-b-4 border-slate-900 dark:border-slate-100 pb-1">
+             <h3 className="text-lg font-black font-mono uppercase">Subject Mastery</h3>
+             <span className="text-xs font-bold uppercase bg-neo-yellow px-2 py-1 text-slate-900 border border-slate-900">Skill Profile</span>
+          </div>
+          
           <div className="h-64 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={studentData}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <RadarChart cx="50%" cy="50%" outerRadius="75%" data={subjectData}>
+                <PolarGrid stroke="#94a3b8" />
+                <PolarAngleAxis 
+                    dataKey="subject" 
+                    tick={{ fill: 'currentColor', fontSize: 11, fontWeight: 'bold' }} 
+                />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Radar
+                    name="Class Avg"
+                    dataKey="classAvg"
+                    stroke="#F97316"
+                    strokeWidth={3}
+                    fill="#F97316"
+                    fillOpacity={0.2}
+                />
+                <Radar
+                    name="My Grade"
+                    dataKey="me"
+                    stroke="#3B82F6"
+                    strokeWidth={3}
+                    fill="#3B82F6"
+                    fillOpacity={0.5}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* CHART 2: Academic Trajectory (Area) */}
+        <div className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
+          <div className="flex justify-between items-center mb-2 border-b-4 border-slate-900 dark:border-slate-100 pb-1">
+             <h3 className="text-lg font-black font-mono uppercase">Academic Trajectory</h3>
+             <span className="text-xs font-bold uppercase bg-neo-green px-2 py-1 text-slate-900 border border-slate-900">Trend</span>
+          </div>
+          
+          <div className="h-64 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <AreaChart data={trendData}>
                 <defs>
                   <linearGradient id="colorGrade" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#4F46E5" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
+                <XAxis dataKey="month" stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
+                <YAxis stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="name" axisLine={true} tickLine={true} tick={{fill: 'currentColor', fontSize: 12, fontWeight: 'bold'}} stroke="currentColor" />
-                <YAxis domain={[0, 100]} axisLine={true} tickLine={true} tick={{fill: 'currentColor', fontSize: 12, fontWeight: 'bold'}} stroke="currentColor" />
-                <Tooltip 
-                    contentStyle={{ 
-                        borderRadius: '0px', 
-                        border: '2px solid currentColor', 
-                        boxShadow: '4px 4px 0px 0px currentColor',
-                        backgroundColor: 'var(--tw-prose-body)',
-                        fontWeight: 'bold',
-                        color: 'currentColor'
-                    }}
-                />
-                <Area 
-                    type="monotone" 
-                    dataKey="attendance" 
-                    stroke="#23EB87" 
-                    strokeWidth={4} 
-                    fillOpacity={0.1} 
-                    fill="#23EB87"
-                />
-                <Area 
-                    type="monotone" 
-                    dataKey="grade" 
-                    stroke="#4F46E5" 
-                    strokeWidth={4} 
-                    fillOpacity={1} 
-                    fill="url(#colorGrade)"
-                />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="grade" stroke="#065F46" strokeWidth={3} fillOpacity={1} fill="url(#colorGrade)" name="My Grade" />
+                <Area type="monotone" dataKey="avg" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" fill="transparent" name="Class Avg" />
+                <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Recent Activity / Notifications */}
-        <div className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
-          <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 border-neo-pink inline-block pb-1">Notifications</h3>
-          <div className="space-y-4">
-             <AlertItem 
-              type="success" 
-              title="Achievement Unlocked" 
-              desc="Code Wizard Badge" 
-              time="2h ago"
-            />
-             <AlertItem 
-              type="info" 
-              title="Homework Due" 
-              desc="Calculus Worksheet" 
-              time="5h ago"
-            />
-             <AlertItem 
-              type="warning" 
-              title="Library Book" 
-              desc="Due tomorrow" 
-              time="1d ago"
-            />
+        {/* CHART 3: Study Efficiency (Composed) */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
+          <div className="flex justify-between items-center mb-2 border-b-4 border-slate-900 dark:border-slate-100 pb-1">
+             <h3 className="text-lg font-black font-mono uppercase">Effort vs Output</h3>
+             <span className="text-xs font-bold uppercase bg-neo-blue px-2 py-1 text-white border border-slate-900">Efficiency</span>
           </div>
+          
+          <div className="h-64 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ComposedChart data={efficiencyData}>
+                <CartesianGrid stroke="#f5f5f5" vertical={false} />
+                <XAxis dataKey="subject" stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
+                <YAxis yAxisId="left" orientation="left" stroke="#F59E0B" tick={{fontSize: 12, fontWeight: 'bold'}} label={{ value: 'Hours', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#F59E0B' }} />
+                <YAxis yAxisId="right" orientation="right" stroke="#4F46E5" tick={{fontSize: 12, fontWeight: 'bold'}} label={{ value: 'Grade', angle: 90, position: 'insideRight', fontSize: 10, fill: '#4F46E5' }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }} />
+                <Bar yAxisId="left" dataKey="hours" name="Study Hours" barSize={20} fill="#F59E0B" stroke="#000" />
+                <Line yAxisId="right" type="monotone" dataKey="grade" name="Grade %" stroke="#4F46E5" strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff', stroke: '#4F46E5'}} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Recent Activity / Notifications Row */}
+      <div className="bg-white dark:bg-slate-900 p-6 border-2 border-slate-900 dark:border-slate-100 shadow-hard">
+        <h3 className="text-lg font-black font-mono mb-6 uppercase border-b-4 border-neo-pink inline-block pb-1">Notifications</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AlertItem 
+            type="success" 
+            title="Achievement Unlocked" 
+            desc="Code Wizard Badge" 
+            time="2h ago"
+            />
+            <AlertItem 
+            type="info" 
+            title="Homework Due" 
+            desc="Calculus Worksheet" 
+            time="5h ago"
+            />
+            <AlertItem 
+            type="warning" 
+            title="Library Book" 
+            desc="Due tomorrow" 
+            time="1d ago"
+            />
         </div>
       </div>
     </div>

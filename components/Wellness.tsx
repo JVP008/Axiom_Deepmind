@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Moon, Smile, Wind, Music, Volume2, Cloud, Activity, Frown, Meh, BarChart2, Play, Pause, Coffee, Users, AlertCircle, CalendarCheck, Send, Sparkles } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -95,12 +94,15 @@ export const Wellness: React.FC = () => {
     }, [isBreathing]);
 
     const getAudioContext = () => {
-        if (!audioCtxRef.current) {
+        // Fix: Check if closed and recreate
+        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             audioCtxRef.current = new AudioContextClass(); // System default rate
         }
         const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') ctx.resume();
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(err => console.error("Failed to resume audio context", err));
+        }
         return ctx;
     };
 
@@ -108,7 +110,7 @@ export const Wellness: React.FC = () => {
         setAudioError(null);
         if (isPlayingAiAudio) {
             if (aiSourceRef.current) {
-                aiSourceRef.current.stop();
+                try { aiSourceRef.current.stop(); } catch(e) {}
                 aiSourceRef.current = null;
             }
             setIsPlayingAiAudio(false);
@@ -147,8 +149,12 @@ export const Wellness: React.FC = () => {
 
     useEffect(() => {
         return () => {
-            if (aiSourceRef.current) aiSourceRef.current.stop();
-            if (audioCtxRef.current) audioCtxRef.current.close();
+            if (aiSourceRef.current) {
+                try { aiSourceRef.current.stop(); } catch(e) {}
+            }
+            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+                audioCtxRef.current.close();
+            }
         };
     }, []);
 
@@ -277,7 +283,7 @@ export const Wellness: React.FC = () => {
                                         <button 
                                             onClick={handleGenerateAiMeditation}
                                             disabled={isGeneratingAudio}
-                                            className={`w-full py-4 bg-white text-slate-900 font-black uppercase border-2 border-slate-900 shadow-hard-sm hover:translate-y-0.5 hover:shadow-none transition-all flex items-center justify-center gap-2 ${isPlayingAiAudio ? 'bg-red-100' : ''}`}
+                                            className={`w-full py-4 bg-white text-slate-900 font-black uppercase border-2 border-slate-900 shadow-hard-sm hover:translate-y-0.5 hover:shadow-none transition-all ${isPlayingAiAudio ? 'bg-red-100' : ''}`}
                                         >
                                             {isGeneratingAudio ? (
                                                 <span className="animate-pulse">Synthesizing...</span>
@@ -305,7 +311,7 @@ export const Wellness: React.FC = () => {
                              <div className="bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-slate-100 shadow-hard p-6 w-full min-w-0">
                                 <h3 className="text-lg font-black uppercase mb-6">Mood vs Stress History</h3>
                                 <div className="h-64 w-full min-w-0">
-                                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                         <AreaChart data={checkinData}>
                                             <XAxis dataKey="day" stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />
                                             <YAxis stroke="currentColor" tick={{fontSize: 12, fontWeight: 'bold'}} />

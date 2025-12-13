@@ -14,6 +14,7 @@ import { Wellness } from './components/Wellness';
 import { StudyPlanner } from './components/StudyPlanner';
 import { DoubtSolver } from './components/DoubtSolver';
 import { LiveTutor } from './components/LiveTutor';
+import { Chatbot } from './components/Chatbot';
 import { ModuleId, UserRole } from './types';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { getDropoutAnalysis } from './services/ai';
@@ -96,17 +97,34 @@ const DropoutPredictor = () => {
     )
 }
 
+// List of all available modules to iterate over
+const ALL_MODULES: ModuleId[] = [
+    'dashboard', 'live', 'timetable', 'attendance', 'students', 
+    'career', 'alumni', 'dropout', 'learning', 'hub', 
+    'validator', 'wellness', 'study', 'doubts'
+];
+
 function App() {
   const [currentModule, setCurrentModule] = useState<ModuleId>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('student');
+  const [visitedModules, setVisitedModules] = useState<Set<ModuleId>>(new Set(['dashboard']));
 
-  // Reset module when switching roles to ensure valid state
+  // Track visited modules so we only mount them when needed, then hide them (Keep Alive)
+  useEffect(() => {
+    setVisitedModules(prev => {
+        const newSet = new Set(prev);
+        newSet.add(currentModule);
+        return newSet;
+    });
+  }, [currentModule]);
+
+  // Reset module when switching roles
   useEffect(() => {
     setCurrentModule('dashboard');
   }, [userRole]);
 
-  const renderModule = () => {
-    switch (currentModule) {
+  const getComponent = (id: ModuleId) => {
+    switch (id) {
       case 'dashboard': return <Dashboard role={userRole} />;
       case 'live': return <LiveTutor />;
       case 'timetable': return <Timetable role={userRole} />;
@@ -117,7 +135,7 @@ function App() {
       case 'dropout': return <DropoutPredictor />;
       case 'learning': return <GamifiedLearning />;
       case 'hub': return <LearningHub />;
-      case 'validator': return <CertificateValidator />;
+      case 'validator': return <CertificateValidator role={userRole} />;
       case 'wellness': return <Wellness />;
       case 'study': return <StudyPlanner />;
       case 'doubts': return <DoubtSolver />;
@@ -132,7 +150,25 @@ function App() {
         userRole={userRole}
         onRoleChange={setUserRole}
     >
-      {renderModule()}
+      <Chatbot />
+      
+      {ALL_MODULES.map(id => {
+          // Only render if it has been visited at least once
+          if (!visitedModules.has(id)) return null;
+
+          return (
+            <div 
+                key={id} 
+                style={{ 
+                    display: currentModule === id ? 'block' : 'none', 
+                    height: '100%',
+                    width: '100%'
+                }}
+            >
+                {getComponent(id)}
+            </div>
+          );
+      })}
     </Layout>
   );
 }
